@@ -10,7 +10,7 @@ import type {
   SettingsResponse,
 } from '@/types'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const API_BASE = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 const USE_MOCK =
   import.meta.env.VITE_USE_MOCK === 'true'
@@ -62,7 +62,7 @@ export async function screenResumes(
     form.append('resumes', f.file, f.name)
   })
 
-  const endpoint = `${API_BASE}/screen`
+  const endpoint = `${API_BASE.replace(/\/?api\/?$/,'')}/api/screen`
   console.log('Sending screening request to:', endpoint)
 
   try {
