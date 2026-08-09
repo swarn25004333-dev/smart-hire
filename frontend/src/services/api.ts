@@ -10,7 +10,9 @@ import type {
   SettingsResponse,
 } from '@/types'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? '/api'
+// VITE_API_URL: full backend base including /api, e.g. https://smart-hire-b6b0.onrender.com/api
+// VITE_API_BASE_URL: used locally (Vite proxy), defaults to /api
+const API_BASE = (import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/+$/, '')
 
 const USE_MOCK =
   import.meta.env.VITE_USE_MOCK === 'true'
@@ -62,7 +64,7 @@ export async function screenResumes(
     form.append('resumes', f.file, f.name)
   })
 
-  const endpoint = `${API_BASE.replace(/\/?api\/?$/,'')}/api/screen`
+  const endpoint = `${API_BASE}/screen`
   console.log('Sending screening request to:', endpoint)
 
   try {
