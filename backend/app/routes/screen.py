@@ -75,9 +75,16 @@ async def screen_resumes(
     blind = blind_screening.strip().lower() in ("1", "true", "yes", "on")
 
     logger.info("Starting AI screening pipeline")
-    logger.info("Using Groq AI provider: %s", bool(settings.openai_api_key))
+    logger.info("AI enabled: %s", settings.ai_enabled)
+    logger.info("AI provider: %s", "Groq" if settings.openai_api_key else "None")
+    logger.info("AI model: %s", settings.openai_model)
 
-    job = ai_service.analyze_job(job_description)
+    try:
+        job = ai_service.analyze_job(job_description)
+    except Exception as exc:
+        logger.error("Job analysis failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
     logger.info("Job analysis completed: %s", job.title)
 
     parsed: List[ParsedResume] = []
@@ -97,10 +104,14 @@ async def screen_resumes(
 
     logger.info("Resume parsing completed for %d file(s)", len(parsed))
 
-    candidates = [
-        ai_service.analyze_candidate(job, resume, index)
-        for index, resume in enumerate(parsed)
-    ]
+    try:
+        candidates = [
+            ai_service.analyze_candidate(job, resume, index)
+            for index, resume in enumerate(parsed)
+        ]
+    except Exception as exc:
+        logger.error("Candidate AI analysis failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
     logger.info("AI analysis completed for all candidates")
 

@@ -1,8 +1,8 @@
 """AI service.
 
 Wraps Groq (via the OpenAI SDK) to produce structured job analysis and
-candidate evaluations. Falls back to a deterministic heuristic engine when no
-API key is configured or when the provider call fails, so the app always works.
+candidate evaluations. Falls back to a deterministic heuristic engine ONLY when
+no API key is configured or offline mode is enabled.
 """
 
 import json
@@ -33,7 +33,7 @@ def powered_by_label() -> str:
 
 
 def _mark_engine() -> None:
-    if settings.openai_api_key and not getattr(settings, "offline_mode", False):
+    if settings.openai_api_key and not settings.offline_mode:
         _ENGINE["value"] = "groq"
     else:
         _ENGINE["value"] = "offline"
@@ -56,7 +56,8 @@ def _provider_configured() -> bool:
 # Providers
 # ---------------------------------------------------------------------------
 def _call_openai(prompt: str) -> Dict[str, Any]:
-    if not settings.openai_api_key:
+    api_key = settings.openai_api_key
+    if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not configured")
     try:
         from openai import OpenAI
@@ -65,11 +66,14 @@ def _call_openai(prompt: str) -> Dict[str, Any]:
             "openai package is not installed. Install it with: pip install openai"
         ) from exc
 
-    logger.info("Using Groq AI provider (model: %s)", settings.openai_model)
+    logger.info("Calling Groq...")
+    logger.info("AI provider: Groq (via OpenAI SDK)")
+    logger.info("AI model: %s", settings.openai_model)
+    logger.info("Groq endpoint: %s", settings.groq_base_url)
 
     try:
         client = OpenAI(
-            api_key=settings.openai_api_key,
+            api_key=api_key,
             base_url=settings.groq_base_url,
             timeout=settings.ai_timeout_seconds,
         )
@@ -80,7 +84,7 @@ def _call_openai(prompt: str) -> Dict[str, Any]:
                     "role": "system",
                     "content": (
                         "You are an expert technical recruiter and resume analyst. "
-                        "Respond ONLY with valid JSON matching the requested schema."
+                        "Respond ONLY with a valid JSON object matching the requested schema."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -88,22 +92,31 @@ def _call_openai(prompt: str) -> Dict[str, Any]:
             temperature=0.2,
             response_format={"type": "json_object"},
         )
+        logger.info("Groq response received")
     except Exception as exc:
-        err_msg = str(exc).lower()
-        if "rate" in err_msg or "429" in err_msg:
+        err_msg = _redact_secrets(str(exc))
+        logger.error("Groq API call failed: %s", err_msg)
+        if "rate" in err_msg.lower() or "429" in err_msg:
             raise RuntimeError("Groq API rate limit exceeded") from exc
-        if "timeout" in err_msg or "deadline" in err_msg:
+        if "timeout" in err_msg.lower() or "deadline" in err_msg.lower():
             raise RuntimeError("Groq API request timed out") from exc
-        if "invalid" in err_msg or "api key" in err_msg or "unauthorized" in err_msg or "401" in err_msg or "403" in err_msg:
-            raise RuntimeError(f"Groq API authentication error: invalid or missing API key") from exc
-        raise RuntimeError(f"Groq API error: {exc}") from exc
+        if any(w in err_msg.lower() for w in ["invalid", "api key", "unauthorized", "401", "403"]):
+            raise RuntimeError("Groq API authentication error: invalid or missing API key") from exc
+        raise RuntimeError(f"Groq API error: {err_msg}") from exc
 
-    if not completion.choices[0].message.content:
-        raise RuntimeError("Groq API returned empty response")
+    if not completion.choices or not completion.choices[0].message or not completion.choices[0].message.content:
+        raise RuntimeError("Groq API returned an empty response")
+
+    content = completion.choices[0].message.content.strip()
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\n?", "", content)
+        content = re.sub(r"\n?```$", "", content)
+        content = content.strip()
 
     try:
-        return json.loads(completion.choices[0].message.content)
+        return json.loads(content)
     except json.JSONDecodeError as exc:
+        logger.error("Groq API returned invalid JSON: %s", exc)
         raise RuntimeError(f"Groq API returned invalid JSON: {exc}") from exc
 
 
@@ -181,12 +194,15 @@ JOB_SCHEMA_EXAMPLE = {
 
 
 def analyze_job(job_text: str) -> JobAnalysis:
+    logger.info("AI enabled: %s", settings.ai_enabled)
     if not settings.ai_enabled:
         logger.info("AI disabled; using offline heuristic engine for job analysis")
         _ENGINE["value"] = "offline"
         return _heuristic_job_analysis(job_text)
 
-    logger.info("Using Groq AI provider for job analysis")
+    logger.info("AI provider: Groq")
+    logger.info("AI model: %s", settings.openai_model)
+    logger.info("Calling Groq for job analysis...")
 
     prompt = f"""You are a job-description analyzer for an ATS tool.
 Extract the following fields from the job description below.
@@ -208,17 +224,18 @@ JOB DESCRIPTION:
         data = _structured_json(prompt)
         job = JobAnalysis.model_validate(data)
         if not job.title or job.title == "Untitled Role":
-            raise ValueError("Model returned empty title")
+            job.title = job_text.splitlines()[0][:80] if job_text.splitlines() else "Job Position"
         _mark_engine()
-        logger.info("AI job analysis completed successfully")
+        logger.info("Groq job analysis completed successfully")
         return job
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "AI job analysis failed (%s); using heuristic fallback.",
-            _redact_secrets(str(exc)),
-        )
-        _ENGINE["value"] = "offline"
-        return _heuristic_job_analysis(job_text)
+    except Exception as exc:
+        err_msg = _redact_secrets(str(exc))
+        if "No AI provider configured" in err_msg:
+            logger.info("No AI provider configured; using heuristic fallback.")
+            _ENGINE["value"] = "offline"
+            return _heuristic_job_analysis(job_text)
+        logger.error("Groq AI job analysis failed: %s", err_msg)
+        raise RuntimeError(f"Groq AI job analysis failed: {err_msg}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -304,10 +321,15 @@ def analyze_candidate(job: JobAnalysis, resume: ParsedResume, index: int) -> Can
     logger.info("Analyzing candidate %d: %s", index + 1, resume.name)
     heuristic = ranking_service.compute_analysis(job, resume, index)
 
+    logger.info("AI enabled: %s", settings.ai_enabled)
     if not settings.ai_enabled:
-        logger.info("AI disabled; using offline heuristic engine for candidate analysis")
+        logger.info("AI disabled; using offline heuristic engine for candidate analysis (%s)", resume.name)
         _ENGINE["value"] = "offline"
         return heuristic
+
+    logger.info("AI provider: Groq")
+    logger.info("AI model: %s", settings.openai_model)
+    logger.info("Calling Groq for candidate analysis (%s)...", resume.name)
 
     prompt = f"""You are an expert technical recruiter for an ATS tool.
 Using ONLY the resume data below (never invent information; if something is
@@ -362,15 +384,16 @@ RESUME:
         # Back-fill any fields the model omitted so the response is always complete.
         _merge_heuristic_fields(candidate, heuristic)
         _mark_engine()
-        logger.info("AI analysis completed for candidate %d: score=%.1f", index + 1, candidate.overallScore)
+        logger.info("Groq candidate analysis completed for %s: score=%.1f", resume.name, candidate.overallScore)
         return candidate
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "AI candidate analysis failed (%s); using heuristic fallback.",
-            _redact_secrets(str(exc)),
-        )
-        _ENGINE["value"] = "offline"
-        return heuristic
+    except Exception as exc:
+        err_msg = _redact_secrets(str(exc))
+        if "No AI provider configured" in err_msg:
+            logger.info("No AI provider configured; using heuristic fallback.")
+            _ENGINE["value"] = "offline"
+            return heuristic
+        logger.error("Groq AI candidate analysis failed for %s: %s", resume.name, err_msg)
+        raise RuntimeError(f"Groq AI candidate analysis failed for {resume.name}: {err_msg}") from exc
 
 
 def _merge_heuristic_fields(ai: CandidateAnalysis, heuristic: CandidateAnalysis) -> None:

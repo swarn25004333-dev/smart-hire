@@ -39,18 +39,17 @@ def _load_runtime_settings():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _load_runtime_settings()
+    logger = logging.getLogger("smart-hire")
+    logger.info("AI enabled: %s", settings.ai_enabled)
     if settings.openai_api_key:
-        provider = "groq"
-        logger = logging.getLogger("smart-hire")
-        logger.info("Using Groq AI provider")
+        logger.info("AI provider: Groq (via OpenAI SDK)")
+        logger.info("AI model: %s", settings.openai_model)
+        logger.info("Groq base URL: %s", settings.groq_base_url)
     else:
-        provider = "none"
-    logging.info(
-        "Smart Hire backend ready. AI provider: %s (offline heuristic engine active: %s)",
-        provider,
-        not settings.ai_enabled,
-    )
+        logger.info("AI provider: None (Offline Heuristic Engine active)")
+    logger.info("Smart Hire backend ready.")
     yield
+
 
 
 app = FastAPI(
