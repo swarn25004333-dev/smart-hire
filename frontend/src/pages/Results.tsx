@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -22,6 +22,7 @@ import {
   ChevronUp,
   Briefcase,
   Target,
+  PlusCircle,
 } from 'lucide-react'
 import Navbar from '@/components/layout/Navbar'
 import AuroraBackground from '@/components/layout/AuroraBackground'
@@ -56,7 +57,13 @@ export default function Results() {
     setBlindScreening,
     compareIds,
     setCompareIds,
+    reset,
   } = useScreening()
+
+  const handleNewAnalysis = useCallback(() => {
+    reset()
+    navigate('/', { replace: true })
+  }, [reset, navigate])
 
   const [filter, setFilter] = useState<FilterKey>('all')
   const [sort, setSort] = useState<SortKey>('high')
@@ -155,6 +162,15 @@ export default function Results() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              id="new-analysis-btn"
+              size="sm"
+              onClick={handleNewAnalysis}
+              className="gap-1.5 text-xs bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-semibold border-0 shadow-lg shadow-cyan-500/20 transition-all hover:shadow-cyan-500/40 hover:scale-[1.02]"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              New Analysis
+            </Button>
             <Button
               variant="outline"
               size="sm"
