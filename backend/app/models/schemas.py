@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Education(BaseModel):
@@ -64,6 +64,25 @@ class MatchReason(BaseModel):
 class SkillGap(BaseModel):
     skill: str
     severity: Literal["critical", "preferred", "informational"] = "informational"
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def normalise_severity(cls, v: Any) -> str:
+        """Map any LLM-generated severity label to a valid Literal value."""
+        if not isinstance(v, str):
+            return "informational"
+        mapping = {
+            "critical": "critical",
+            "high": "critical",
+            "preferred": "preferred",
+            "medium": "preferred",
+            "moderate": "preferred",
+            "informational": "informational",
+            "low": "informational",
+            "minor": "informational",
+            "optional": "informational",
+        }
+        return mapping.get(v.lower().strip(), "informational")
 
 
 class CandidateAnalysis(BaseModel):
