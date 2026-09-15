@@ -20,7 +20,7 @@ class Settings:
     def openai_api_key(self) -> str:
         if self._openai_api_key is not None:
             return self._openai_api_key
-        return os.getenv("OPENAI_API_KEY", "").strip()
+        return (os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY", "")).strip()
 
     @openai_api_key.setter
     def openai_api_key(self, value: str) -> None:
@@ -65,7 +65,10 @@ class Settings:
 
     @property
     def openai_model(self) -> str:
-        return os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile").strip()
+        model = (os.getenv("GROQ_MODEL") or os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile")).strip()
+        if model.lower().startswith("llams"):
+            model = "llama" + model[5:]
+        return model or "llama-3.3-70b-versatile"
 
     @property
     def gemini_model(self) -> str:

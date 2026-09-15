@@ -65,6 +65,18 @@ class TestRoutes(unittest.TestCase):
         self.assertIn("metrics", data)
         self.assertEqual(len(data["candidates"]), 1)
 
+    def test_settings_and_model_normalization(self):
+        import os
+        from app.config import settings
+
+        os.environ["GROQ_MODEL"] = "llams-3.3-70b-versatile"
+        self.assertEqual(settings.openai_model, "llama-3.3-70b-versatile")
+
+        os.environ["GROQ_API_KEY"] = "gsk_test123"
+        self.assertEqual(settings.openai_api_key, "gsk_test123")
+        os.environ.pop("GROQ_API_KEY", None)
+        os.environ.pop("GROQ_MODEL", None)
+
 
 if __name__ == "__main__":
     unittest.main()

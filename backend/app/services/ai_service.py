@@ -96,11 +96,12 @@ def _call_openai(prompt: str) -> Dict[str, Any]:
     except Exception as exc:
         err_msg = _redact_secrets(str(exc))
         logger.error("Groq API call failed: %s", err_msg)
-        if "rate" in err_msg.lower() or "429" in err_msg:
+        err_lower = err_msg.lower()
+        if "rate" in err_lower or "429" in err_lower:
             raise RuntimeError("Groq API rate limit exceeded") from exc
-        if "timeout" in err_msg.lower() or "deadline" in err_msg.lower():
+        if "timeout" in err_lower or "deadline" in err_lower:
             raise RuntimeError("Groq API request timed out") from exc
-        if any(w in err_msg.lower() for w in ["invalid", "api key", "unauthorized", "401", "403"]):
+        if any(w in err_lower for w in ["invalid_api_key", "invalid api key", "unauthorized", "incorrect api key", "401", "authenticationerror"]):
             raise RuntimeError("Groq API authentication error: invalid or missing API key") from exc
         raise RuntimeError(f"Groq API error: {err_msg}") from exc
 
