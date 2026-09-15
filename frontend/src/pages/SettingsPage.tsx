@@ -117,14 +117,14 @@ export default function SettingsPage() {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-300">OpenAI API Key</label>
+                    <label className="text-xs font-medium text-slate-300">Groq API Key</label>
                     <StatusPill configured={settings.openaiConfigured} />
                   </div>
                   <input
                     type="password"
                     value={openaiKey}
                     onChange={(e) => setOpenaiKey(e.target.value)}
-                    placeholder={settings.openaiConfigured ? '•••••••• (configured — enter to replace)' : 'Enter OpenAI API key...'}
+                    placeholder={settings.openaiConfigured ? '•••••••• (configured — enter to replace)' : 'Enter Groq API key (gsk_...)...'}
                     className="h-10 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-medium text-slate-200 outline-none placeholder:text-slate-600 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
                   />
                 </div>

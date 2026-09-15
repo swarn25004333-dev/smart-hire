@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,9 +28,16 @@ def _load_runtime_settings():
 
         init_db()
         stored = get_settings()
-        if stored.get("geminiApiKey"):
+        # Deployment secrets must take precedence over values persisted in the
+        # application database.  Otherwise a stale key saved through the UI
+        # silently overrides a rotated key configured in Render.
+        if stored.get("geminiApiKey") and not os.getenv("GEMINI_API_KEY", "").strip():
             settings.gemini_api_key = str(stored["geminiApiKey"]).strip()
-        if stored.get("openaiApiKey"):
+        if (
+            stored.get("openaiApiKey")
+            and not os.getenv("GROQ_API_KEY", "").strip()
+            and not os.getenv("OPENAI_API_KEY", "").strip()
+        ):
             settings.openai_api_key = str(stored["openaiApiKey"]).strip()
         settings.offline_mode = bool(stored.get("offlineMode"))
     except Exception as exc:  # noqa: BLE001

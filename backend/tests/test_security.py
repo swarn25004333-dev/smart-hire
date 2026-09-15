@@ -145,13 +145,16 @@ class TestApiKeyHandling(unittest.TestCase):
 
         originals = {
             "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY"),
+            "GROQ_API_KEY": os.environ.get("GROQ_API_KEY"),
             "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY"),
         }
         try:
             os.environ["GEMINI_API_KEY"] = "gemini-env-test-key"
+            os.environ["GROQ_API_KEY"] = "groq-env-test-key"
             os.environ["OPENAI_API_KEY"] = ""
             importlib.reload(config_module)
             self.assertEqual(config_module.settings.gemini_api_key, "gemini-env-test-key")
+            self.assertEqual(config_module.settings.openai_api_key, "groq-env-test-key")
             self.assertTrue(config_module.settings.ai_enabled)
         finally:
             for name, value in originals.items():

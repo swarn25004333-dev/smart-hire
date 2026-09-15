@@ -18,9 +18,18 @@ class Settings:
 
     @property
     def openai_api_key(self) -> str:
+        """Backward-compatible alias for the Groq key.
+
+        Groq exposes an OpenAI-compatible API, but it does not use an OpenAI
+        credential.  New deployments should configure ``GROQ_API_KEY``.
+        ``OPENAI_API_KEY`` remains supported for existing deployments.
+        """
         if self._openai_api_key is not None:
             return self._openai_api_key
-        return (os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY", "")).strip()
+        return (
+            os.getenv("GROQ_API_KEY", "").strip()
+            or os.getenv("OPENAI_API_KEY", "").strip()
+        )
 
     @openai_api_key.setter
     def openai_api_key(self, value: str) -> None:
